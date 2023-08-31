@@ -52,7 +52,7 @@ contract BridgeA is Ownable {
         token.transferFrom(msg.sender, address(this), _amount);
         uint fee = _calculateFee(_amount);
         uint amountTransferred = _amount-fee;
-        token.transferFrom(msg.sender, reserveA, amountTransferred);
+        token.transferFrom(address(this), reserveA, amountTransferred);
 
         emit  BridgeInitiated(_msgSender(), _msgSender(), amountTransferred, fee);
     }

@@ -12,3 +12,7 @@ This bridge project demonstrates how to transfer tokens between Ethereum and Pol
 - Utilizes ethers.js library for interaction with Ethereum and Polygon networks.
 - Modular structure for easy understanding and customization.
 
+## NB
+
+- DO NOT USE IN PRODUCTION AS IS
+- Security considerations, Issues such as reverting tokens transactions that have not completed etc need to be addressed
