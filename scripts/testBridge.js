@@ -1,56 +1,96 @@
-const {ethers} = require("ethers")
-const {abi} = require("../artifacts/contracts/bridge.sol/BridgeA.json")
-//const tokens = require("../artifacts/contracts/token.sol")
-async function main() {
-
-    const RPC1= "https://eth-sepolia.g.alchemy.com/v2/Z60B8aMREX4qBnFu-s0e3QIGKW_YF8Op"
-    const provider1 = new ethers.providers.JsonRpcProvider(RPC1)
-    const RPC2 = "https://polygon-mumbai.g.alchemy.com/v2/EiEk6hXCVsVB1cy6VIPlNdVaH8qNkCiZ"
-    const provider2 = new ethers.providers.JsonRpcProvider(RPC2)
-  
-    const tokenEth = "0x9779b335b278d8E53F91f9D40210E7CbCb239fC2"
-    const bridgeAddress = "0xF633993696540D0D120FFCae5385C4Deb5e5FD6a"
+const { ethers } = require("ethers");
+const { abi } = require("../artifacts/contracts/bridge.sol/BridgeA.json");
+const token = require("../artifacts/contracts/token.sol/bridgeToken.json")
 
 
-    const privateKey= "db71b39375e0efaf240b24f89cb14d32d07c6679ea5a06ae4a52dc6ed806c401"; // Replace with your private key
+const reserveWallet = /* Insert Address */ ''
 
-  const wallet1 = new ethers.Wallet(privateKey, provider1);
-  const wallet2 = new ethers.Wallet(privateKey, provider2);
+// Ethereum configuration
+const ethRPC = "https://eth-sepolia.g.alchemy.com/v2/API--KEY";
+const ethProvider = new ethers.providers.JsonRpcProvider(ethRPC);
+const ethPrivateKey = '';
+const ethWallet = new ethers.Wallet(ethPrivateKey, ethProvider);
+const ethBridgeAddress = "0xF633993696540D0D120FFCae5385C4Deb5e5FD6a";
+const ethBridgeContract = new ethers.Contract(ethBridgeAddress, abi, ethWallet);
 
-    const bEth = new ethers.Contract( bridgeAddress, abi, wallet1)
-    const bPol =new ethers.Contract(bridgeAddress, abi,wallet2)
 
-     const bridgeStart = await bEth.bridgeTokens(200)
-      console.log("Init---------------")
+// Polygon configuration
+const polygonRPC = "https://polygon-mumbai.g.alchemy.com/v2/API--KEY";
+const polygonProvider = new ethers.providers.JsonRpcProvider(polygonRPC);
+const polygonPrivateKey = '';
+const polygonWallet = new ethers.Wallet(polygonPrivateKey, polygonProvider);
+const polygonBridgeAddress = "";
+const polygonBridgeContract = new ethers.Contract(polygonBridgeAddress, abi, polygonWallet);
 
-      const transactionReceipt = await bridgeStart.wait();
+//token for reserve approval polygon
+const rKey = ''
+const reserves= new ethers.Wallet(rKey,polygonProvider)
+const tokenAddress = ""
+const tokenContract = new ethers.Contract(tokenAddress, token.abi,reserves)
 
-  // Access the emitted events from the receipt
-  const events = transactionReceipt.events;
+// token reserve approval eth
+const reservesEth= new ethers.Wallet(rKey,ethProvider)
+const tknAddress = ""
+const tknContract = new ethers.Contract(tknAddress, token.abi,reservesEth)
 
-  // Find the event named "TokensBridged"
-  const tokensBridgedEvent = events.find(event => event.event === "BridgeInitiated");
+async function approveToken(){
+  const allowance = ethers.utils.parseEther("100"); // Amount in Ether
 
-  if (tokensBridgedEvent) {
-    const sender = tokensBridgedEvent.args._initiator;
-    const receiver = tokensBridgedEvent.args._recepient;
-    const amount = tokensBridgedEvent.args._amountsent;
-    const fees = tokensBridgedEvent.args._feePaid;
-
-    console.log("Sender:", sender);
-    console.log("Receiver:", receiver);
-    console.log("Amount:", amount);
-
-    await bPol.CompleteBridge(sender, receiver, amount);
-
-    console.log("------Bridge Complete-------------")
-  } else {
-    console.log("TokensBridged event not found.");
+  if(await tokenContract.allowance(reserveWallet, polygonBridgeAddress) == 0){
+    await tokenContract.approve(polygonBridgeAddress, allowance)
   }
-    }
-    main()
-    .then(() => process.exit(0))
-    .catch(error => {
-        console.error(error);
-        process.exit();
-    });
+
+  if(await tknContract.allowance(reserveWallet, ethBridgeAddress) == 0){
+    await tknContract.approve(ethBridgeAddress, allowance)
+  }
+
+}
+
+// Function to initiate bridging from Ethereum to Polygon
+async function ethToPolygonBridge(sender, receiver, amount) {
+  const ethReserves = await ethBridgeContract.bridgeTokens(amount);
+
+  // Wait for the Ethereum reserves to be confirmed
+  await ethReserves.wait();
+
+  // Now initiate bridging from Polygon reserves to the receiver
+  const polygonReserves = await polygonBridgeContract.CompleteBridge(sender, receiver, amount, { gasLimit: 2000000 });
+  const polygonReservesTx = await polygonReserves.wait();
+
+  console.log("Bridging from Ethereum to Polygon completed.");
+  console.log("Ethereum Reserves Transaction:", ethReserves.hash);
+  console.log("Polygon Reserves Transaction:", polygonReservesTx.hash);
+}
+
+// Function to initiate bridging from Polygon to Ethereum
+async function polygonToEthBridge(sender, receiver, amount) {
+  const polygonReserves = await polygonBridgeContract.bridgeTokens(amount);
+
+  // Wait for the Polygon reserves to be confirmed
+  await polygonReserves.wait();
+
+  // Now initiate bridging from Ethereum reserves to the receiver
+  const ethReserves = await ethBridgeContract.CompleteBridge(amount, { gasLimit: 2000000 });
+  await ethReserves.wait();
+
+  console.log("Bridging from Polygon to Ethereum completed.");
+  console.log("Polygon Reserves Transaction:", polygonReserves.hash);
+  console.log("Ethereum Reserves Transaction:", ethReserves.hash);
+}
+
+// Example usage
+async function main() {
+  const sender = ethWallet.address;
+  const receiver = polygonWallet.address;
+  const amount = ethers.utils.parseEther("1"); // Amount in Ether
+
+  approveToken()
+  // Bridging from Ethereum to Polygon
+
+  await ethToPolygonBridge(sender, receiver, amount);
+
+  // Bridging from Polygon to Ethereum
+  await polygonToEthBridge(sender, receiver, amount);
+}
+
+main();
