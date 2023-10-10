@@ -10,6 +10,9 @@ import {
   Card,
   CardContent,
 } from '@mui/material';
+import Web3 from 'web3';
+
+import tokenABI from '../../../artifacts/contracts/token.sol/bridgeToken.json';
 
 function TokenSwapPage() {
   const [fromToken, setFromToken] = useState('Marachain');
@@ -30,6 +33,36 @@ function TokenSwapPage() {
     setFromAmount(e.target.value);
   };
 
+  const approveTokens = async () => {
+    try {
+      if (!Web3) {
+        console.error('Web3 not initialized.');
+        return;
+      }
+  
+      const tokenAddress = '0x5fF20D86edBDFa4Feb827F042385DC88316EF714'; // Replace with your token's address
+      const bridgeAddress = '0xf891e8c207830A422a5dD868E82B47d749302987'; // Replace with your bridge contract's address
+  
+      const tokenContract = new Web3.eth.Contract(tokenABI, tokenAddress);
+
+    // Determine the allowance (approved amount) for the bridge contract
+    const allowance = await tokenContract.methods.allowance(connectedWallet, bridgeAddress).call();
+
+    // Check if the allowance is sufficient, or if the user needs to approve more tokens
+    const requiredAllowance = Web3.utils.toWei(fromAmount.toString(), 'ether'); // Convert amount to wei
+    if (Web3.utils.toBN(allowance).lt(Web3.utils.toBN(requiredAllowance))) {
+      // Send an approval transaction
+      await tokenContract.methods.approve(bridgeAddress, requiredAllowance).send({ from: connectedWallet });
+
+      console.log('Approval transaction sent.');
+    } else {
+      console.log('Tokens are already approved.');
+    }
+  } catch (error) {
+    console.error('Error approving tokens:', error);
+  }
+};
+  
   
 
   const handleBridge = async () => {
@@ -157,6 +190,18 @@ function TokenSwapPage() {
               Swap
             </Button>
           </Grid>
+          <Grid item xs={12}>
+          <Button
+  variant="contained"
+  color="primary"
+  fullWidth
+  onClick={approveTokens} // Attach the approveTokens function here
+>
+  Approve
+</Button>
+
+          </Grid>
+
           <Grid item xs={12}>
             <Typography variant="h6">Receive: {toAmount}</Typography>
           </Grid>
